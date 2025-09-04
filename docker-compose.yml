@@ -1,0 +1,87 @@
+version: "3.9"
+services:
+  frontend:
+    image: php:8.2-apache
+    container_name: transport-frontend
+    ports:
+      - "8080:80"
+    volumes:
+      - ./src:/var/www/html
+    restart: unless-stopped
+
+  web:
+    image: travel-web-app
+    container_name: travel-web-app
+    environment:
+      - DB_HOST: mysql
+      - DB_USER: traveluser
+      - DB_PASS: 1234password
+      - DB_NAME: transport
+    depends_on:
+      - mysql
+    networks:
+      - backend
+    volumes:
+      - ./transport:/var/www/html/transport:ro
+
+  pma:
+    image: phpmyadmin:5
+    container_name: phpmyadmin
+    environment:
+      PMA_HOST: mysql
+      PMA_USER: root
+      PMA_PASSWORD: 1234rootpassword
+    depends_on:
+      - mysql
+    networks:
+      - backend
+
+  proxy:
+    image: nginx:1.25-alpine
+    container_name: nginx-proxy
+    depends_on:
+      - web
+      - pma
+    ports:
+      - "80:80"
+      - "433:433"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl/localhost/crt:/etc/ssl/certs/localhost.crt:ro
+      - ./ssl/localhost.key:/etc/private/localhost.key:ro
+    networks:
+      - backend
+
+  dbproject3:  #Transport.sql database
+    image: mysql:8.0  #Pulilng straight from official base image
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASEL: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - dbproject3data:/var/lib/mysql
+      - ./database_backend:/docker-entrypoint-initdb.d:ro
+    networks:
+      - backend
+
+  db_ui:
+    image: phpmyadmin:5-apache
+    depends_on:
+      - dbproject3
+    environment:
+      PMA_HOST: dbproject3
+      PMA_ARBITRARY: 0  #I removed the ability to auto login (Tedious but better security), It's set to 0 so it only connects to the team's DB
+    ports:
+      - "3000:80"  #We'll leave 80:80 for nginX
+    networks:
+      - backend
+      - frontend
+
+volumes:
+  dbproject3data:
+
+networks:
+  frontend:
+  backend:
+    internal: true #Only available to other containers
